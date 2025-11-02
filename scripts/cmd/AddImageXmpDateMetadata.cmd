@@ -2,12 +2,12 @@
 @echo off
 setlocal EnableExtensions
 set "_ROOT=%~dp0.."
-set "_SCRIPT=%_ROOT%\scripts\AddImageXmpDateMetadata.ps1"
+set "_SCRIPT=%_ROOT%\AddImageXmpDateMetadata.ps1"
 
 where pwsh.exe >nul 2>&1
 if not errorlevel 1 (
-  pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%_SCRIPT%" -Verbose %*
+  pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%_SCRIPT%" -Passthru -Verbose %*
 ) else (
-  powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%_SCRIPT%" -Verbose %*
+  powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%_SCRIPT%" -Passthru -Verbose %*
 )
 endlocal

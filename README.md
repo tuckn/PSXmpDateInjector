@@ -1,44 +1,58 @@
 ﻿
 # PSXmpDateInjector
 
-PSXmpDateInjector adds XMP creation date metadata to image files by parsing timestamps from their file names and invoking exiftool to update the XMP `exif:DateTimeOriginal`, `photoshop:DateCreated`, and `xmp:CreateDate` tags.
+PSXmpDateInjector adds XMP creation date metadata to image files by parsing timestamps from their file names and invoking exiftool to update the XMP `exif:DateTimeOriginal`, `photoshop:DateCreated`, and `xmp:CreateDate` tags. These tags are the same ones Lightroom Classic rewrites when you adjust a photo’s Capture Time, so keeping them synchronized preserves compatibility with Lightroom’s date handling.
 
 ## Requirements
 
 - Windows PowerShell 5.1
-- `exiftool` available on the system `PATH`, or provide `-ExifToolPath` to point at `bin\exiftool.exe` (bundled with the repository).
+- Install `exiftool` separately or ensure it is available on the system `PATH`. When it is not on `PATH`, pass `-ExifToolPath` to point at your copy of the executable. (The repository intentionally does not bundle the binary.)
 
 ## Usage
+
+### Run via the helper script
+
+```powershell
+scripts\AddImageXmpDateMetadata.ps1 -InputPath "D:\My Screenshots"
+```
+
+### with optional JSON configuration
+
+```powershell
+scripts\AddImageXmpDateMetadata.ps1 -ConfigJsonPath .\scripts\config_sample.json -Passthru
+```
+
+`scripts\config_sample.json` illustrates the available keys (`InputPath`, `Recurse`, `Passthru`, `ExifToolPath`, `OutputDirectory`). Values supplied on the command line always override values from the JSON file.
+
+### Use the CMD launcher
+
+```cmd
+scripts\cmd\AddImageXmpDateMetadata.cmd "D:\My Screenshots" -Recurse -ExifToolPath "C:\Program Files\Exiftool\exiftool.exe"
+```
+
+Use `-WhatIf` to review the planned updates without writing metadata, `-Passthru` to emit processing results to the pipeline, `-OutputDirectory` to stage changes in another folder, and `-ExifToolPath` when you need to target a specific exiftool binary.
 
 ### Use exiftool from the system `PATH`
 
 ```powershell
 Import-Module (Join-Path $PSScriptRoot 'PSXmpDateInjector.psd1') -Force
-Add-ImageXmpDateMetadata -InputPath .\assets -Recurse -Verbose
+Add-ImageXmpDateMetadata -InputPath .ssets -Recurse -Verbose
 ```
 
-### Use the bundled exiftool executable
+### Point to a specific exiftool executable
 
 ```powershell
-$repoRoot = Get-Location
-Import-Module (Join-Path $repoRoot 'PSXmpDateInjector.psd1') -Force
-$exifTool = Join-Path $repoRoot 'bin\exiftool.exe'
-Add-ImageXmpDateMetadata -InputPath .\assets -Recurse -Passthru -ExifToolPath $exifTool
+Import-Module (Join-Path (Get-Location) 'PSXmpDateInjector.psd1') -Force
+$exifTool = 'C:	ools\exiftool\exiftool.exe'
+Add-ImageXmpDateMetadata -InputPath .ssets -Recurse -Passthru -ExifToolPath $exifTool
 ```
 
-### Run via the helper script
+### Write results into a separate directory
 
 ```powershell
-scripts\AddImageXmpDateMetadata.ps1 -InputPath .\assets -Recurse -Passthru -ExifToolPath (Join-Path (Get-Location) 'bin\exiftool.exe')
+Import-Module (Join-Path $PSScriptRoot 'PSXmpDateInjector.psd1') -Force
+Add-ImageXmpDateMetadata -InputPath .\assets -Recurse -OutputDirectory .\out -ExifToolPath 'C:\Program Files\Exiftool\exiftool.exe'
 ```
-
-### Use the CMD launcher
-
-```cmd
-scripts\cmd\AddImageXmpDateMetadata.cmd .\assets -Recurse -Passthru -ExifToolPath .\bin\exiftool.exe
-```
-
-Use `-WhatIf` to review the planned updates without writing metadata, `-Passthru` to emit processing results to the pipeline, and `-ExifToolPath` when you need to target a specific exiftool binary.
 
 ## Testing
 

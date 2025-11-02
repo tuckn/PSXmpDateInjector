@@ -1,0 +1,7 @@
+{
+  "InputPath": "D:\\My Screenshots",
+  "ExifToolPath": "C:\\Program Files\\ExifTool\\ExifTool.exe",
+  "OutputDirectory": "D:\\My Screenshots\\dest",
+  "Recurse": true,
+  "Passthru": false
+}

@@ -1,6 +1,7 @@
 ﻿Set-StrictMode -Version 3.0
 $ErrorActionPreference = 'Stop'
 
+Remove-Module PSXmpDateInjector,AddImageXmpDateMetadata -ErrorAction SilentlyContinue
 $modulePath = Join-Path $PSScriptRoot '..\PSXmpDateInjector.psd1'
 Import-Module $modulePath -Force -ErrorAction Stop
 
@@ -21,14 +22,20 @@ Describe 'PSXmpDateInjector' {
 
         $script:AssetsRoot = (Resolve-Path -LiteralPath $assetsRootCandidate).ProviderPath
         $script:AssetsDest = [System.IO.Path]::Combine($script:AssetsRoot, 'dest')
+        $script:OutputRoot = [System.IO.Path]::Combine($script:AssetsRoot, 'out')
 
-        if (Test-Path -LiteralPath $script:AssetsDest) {
-            Remove-Item -LiteralPath $script:AssetsDest -Recurse -Force
+        foreach ($folder in @($script:AssetsDest, $script:OutputRoot)) {
+            if (Test-Path -LiteralPath $folder) {
+                Remove-Item -LiteralPath $folder -Recurse -Force
+            }
         }
 
-        $destExclusionPattern = [System.IO.Path]::Combine($script:AssetsDest, '*')
+        $excludePatterns = @([System.IO.Path]::Combine($script:AssetsDest, '*'), [System.IO.Path]::Combine($script:OutputRoot, '*'))
         $script:SourceAssets = Get-ChildItem -LiteralPath $script:AssetsRoot -File -Recurse | Where-Object {
-            $_.FullName -notlike $destExclusionPattern
+            foreach ($pattern in $excludePatterns) {
+                if ($_.FullName -like $pattern) { return $false }
+            }
+            return $true
         }
 
         $preferredExifTool = [System.IO.Path]::Combine($repoRoot, 'bin', 'exiftool')
@@ -49,11 +56,12 @@ Describe 'PSXmpDateInjector' {
     BeforeEach {
         Set-Variable -Name WhatIfPreference -Value $false -Scope Global
 
-        if (Test-Path -LiteralPath $script:AssetsDest) {
-            Remove-Item -LiteralPath $script:AssetsDest -Recurse -Force
+        foreach ($folder in @($script:AssetsDest, $script:OutputRoot)) {
+            if (Test-Path -LiteralPath $folder) {
+                Remove-Item -LiteralPath $folder -Recurse -Force
+            }
+            New-Item -ItemType Directory -Path $folder | Out-Null
         }
-
-        New-Item -ItemType Directory -Path $script:AssetsDest | Out-Null
 
         foreach ($source in $script:SourceAssets) {
             $relative = $source.FullName.Substring($script:AssetsRoot.Length).TrimStart('\', '/')
@@ -123,7 +131,7 @@ Describe 'PSXmpDateInjector' {
                 param($fp, $toolPath)
                 Mock Invoke-PSXmpDateInjectorExifTool { param($ExecutablePath, $Arguments) return 0 } -ModuleName AddImageXmpDateMetadata
 
-                $result = Add-ImageXmpDateMetadata -InputPath $fp -Passthru -ExifToolPath $toolPath -Confirm:$false
+                $result = Add-ImageXmpDateMetadata -InputPath $fp -Passthru -ExifToolPath $toolPath -WhatIf:$false -Confirm:$false
 
                 Assert-MockCalled Invoke-PSXmpDateInjectorExifTool -Times 1 -ParameterFilter {
                     $ExecutablePath -eq $toolPath -and
@@ -135,6 +143,7 @@ Describe 'PSXmpDateInjector' {
                 }
 
                 $result | Should -Not -BeNull
+                $result.SourcePath | Should -Be $fp
                 $result.FilePath | Should -Be $fp
                 $result.Timestamp | Should -Be '2013-06-30T02:36:00'
                 $result.ExifTool | Should -Be $toolPath
@@ -164,10 +173,32 @@ Describe 'PSXmpDateInjector' {
                 Mock Invoke-PSXmpDateInjectorExifTool { param($ExecutablePath, $Arguments) return 0 } -ModuleName AddImageXmpDateMetadata
                 Mock Get-DateFromFileName { return $null } -ModuleName AddImageXmpDateMetadata
 
-                Add-ImageXmpDateMetadata -InputPath $fp -ExifToolPath $tp -Confirm:$false
+                Add-ImageXmpDateMetadata -InputPath $fp -ExifToolPath $tp -WhatIf:$false -Confirm:$false
 
                 Assert-MockCalled Invoke-PSXmpDateInjectorExifTool -Times 0
             } -ArgumentList $filePath, $toolPath
+        }
+
+        It 'writes files to the designated output directory when specified' {
+            $toolPath = $script:TestExifToolPath
+            $assetsDest = $script:AssetsDest
+            $outputRoot = $script:OutputRoot
+
+            InModuleScope AddImageXmpDateMetadata -ScriptBlock {
+                param($sourceRoot, $outRoot, $tp)
+                Mock Invoke-PSXmpDateInjectorExifTool { param($ExecutablePath, $Arguments) return 0 } -ModuleName AddImageXmpDateMetadata
+
+                $results = Add-ImageXmpDateMetadata -InputPath $sourceRoot -Recurse -Passthru -OutputDirectory $outRoot -ExifToolPath $tp -WhatIf:$false -Confirm:$false | Sort-Object FilePath
+
+                Assert-MockCalled Invoke-PSXmpDateInjectorExifTool -Times 4 -ParameterFilter {
+                    $ExecutablePath -eq $tp -and $Arguments[-1] -like ($outRoot + '*')
+                }
+                $results.Count | Should -Be 4
+                (($results | Where-Object { $_.SourcePath -notlike ($sourceRoot + '*') }) | Measure-Object).Count | Should -Be 0
+                (($results | Where-Object { $_.FilePath -notlike ($outRoot + '*') }) | Measure-Object).Count | Should -Be 0
+            } -ArgumentList $assetsDest, $outputRoot, $toolPath
+
+            (Get-ChildItem -LiteralPath $script:OutputRoot -File -Recurse | Measure-Object).Count | Should -Be 4
         }
 
         It 'processes every supported image in a directory when Recurse is used' {
@@ -178,7 +209,7 @@ Describe 'PSXmpDateInjector' {
                 param($dest, $tp)
                 Mock Invoke-PSXmpDateInjectorExifTool { param($ExecutablePath, $Arguments) return 0 } -ModuleName AddImageXmpDateMetadata
 
-                $results = Add-ImageXmpDateMetadata -InputPath $dest -Recurse -Passthru -ExifToolPath $tp -Confirm:$false | Sort-Object FilePath
+                $results = Add-ImageXmpDateMetadata -InputPath $dest -Recurse -Passthru -ExifToolPath $tp -WhatIf:$false -Confirm:$false | Sort-Object FilePath
 
                 Assert-MockCalled Invoke-PSXmpDateInjectorExifTool -Times 4
                 $results.Count | Should -Be 4
@@ -186,6 +217,7 @@ Describe 'PSXmpDateInjector' {
                 ($results | Where-Object { $_.FilePath -like '*2003-01-28-224920_yuno-Image1.jpg' }).Timestamp | Should -Be '2003-01-28T22:49:20'
                 ($results | Where-Object { $_.FilePath -like '*Screenshot 2025-11-02 073031.png' }).Timestamp | Should -Be '2025-11-02T07:30:31'
                 ($results | Where-Object { $_.FilePath -like '*screencapture-VirtualBox_Windows XP Mode_15_10_2016_07_49_43.png' }).Timestamp | Should -Be '2016-10-15T07:49:43'
+                (($results | Where-Object { $_.SourcePath -ne $_.FilePath }) | Measure-Object).Count | Should -Be 0
             } -ArgumentList $assetsDest, $toolPath
         }
     }

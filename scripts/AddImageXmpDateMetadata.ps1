@@ -1,6 +1,7 @@
-﻿[CmdletBinding(SupportsShouldProcess = $true)]
+﻿
+[CmdletBinding(SupportsShouldProcess = $true)]
 param(
-    [Parameter(Position = 0, Mandatory = $true)]
+    [Parameter(Position = 0)]
     [ValidateNotNullOrEmpty()]
     [string] $InputPath,
 
@@ -9,7 +10,13 @@ param(
     [switch] $Passthru,
 
     [ValidateNotNullOrEmpty()]
-    [string] $ExifToolPath
+    [string] $ExifToolPath,
+
+    [ValidateNotNullOrEmpty()]
+    [string] $OutputDirectory,
+
+    [ValidateNotNullOrEmpty()]
+    [string] $ConfigJsonPath
 )
 
 Set-StrictMode -Version 3.0
@@ -17,4 +24,54 @@ $ErrorActionPreference = 'Stop'
 
 Import-Module (Join-Path $PSScriptRoot '..\PSXmpDateInjector.psd1') -Force -ErrorAction Stop
 
-Add-ImageXmpDateMetadata @PSBoundParameters
+$parameterOrder = @('InputPath', 'Recurse', 'Passthru', 'ExifToolPath', 'OutputDirectory')
+$configParameters = @{}
+
+if ($PSBoundParameters.ContainsKey('ConfigJsonPath')) {
+    try {
+        $resolvedConfigPath = (Resolve-Path -LiteralPath $ConfigJsonPath -ErrorAction Stop).ProviderPath
+    }
+    catch {
+        throw ("The configuration file '{0}' could not be resolved: {1}" -f $ConfigJsonPath, $_.Exception.Message)
+    }
+
+    try {
+        $configContent = Get-Content -LiteralPath $resolvedConfigPath -Raw -ErrorAction Stop
+        $configData = $configContent | ConvertFrom-Json -ErrorAction Stop
+    }
+    catch {
+        throw ("Failed to parse configuration file '{0}': {1}" -f $resolvedConfigPath, $_.Exception.Message)
+    }
+
+    foreach ($name in $parameterOrder) {
+        if ($null -ne $configData.$name) {
+            $configParameters[$name] = $configData.$name
+        }
+    }
+}
+
+$effectiveParameters = @{}
+
+foreach ($name in $parameterOrder) {
+    if ($configParameters.ContainsKey($name)) {
+        $effectiveParameters[$name] = $configParameters[$name]
+    }
+}
+
+foreach ($name in $parameterOrder) {
+    if ($PSBoundParameters.ContainsKey($name)) {
+        $effectiveParameters[$name] = $PSBoundParameters[$name]
+    }
+}
+
+foreach ($control in @('WhatIf', 'Confirm')) {
+    if ($PSBoundParameters.ContainsKey($control)) {
+        $effectiveParameters[$control] = $PSBoundParameters[$control]
+    }
+}
+
+if (-not $effectiveParameters.ContainsKey('InputPath') -or [string]::IsNullOrWhiteSpace([string]$effectiveParameters['InputPath'])) {
+    throw 'InputPath must be supplied either on the command line or in the configuration file.'
+}
+
+Add-ImageXmpDateMetadata @effectiveParameters

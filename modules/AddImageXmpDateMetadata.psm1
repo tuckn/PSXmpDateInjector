@@ -124,6 +124,8 @@ function Invoke-PSXmpDateInjectorExifTool {
     return $LASTEXITCODE
 }
 
+
+
 function Add-ImageXmpDateMetadata {
 <#
 .SYNOPSIS
@@ -144,10 +146,18 @@ Outputs an object describing each updated file to the pipeline.
 .PARAMETER ExifToolPath
 Provides the path to the exiftool executable. When omitted, the function searches for exiftool on the PATH.
 
-.EXAMPLE
-Add-ImageXmpDateMetadata -InputPath (Join-Path $PWD 'assets') -Recurse -Verbose -ExifToolPath (Join-Path $PWD 'bin\exiftool.exe')
+.PARAMETER OutputDirectory
+Specifies a directory where processed files are written. When provided, source files are copied to the directory (preserving relative structure for directory inputs) before metadata is updated. When omitted, files are updated in place.
 
-Processes every supported image beneath the assets directory, recursing into child folders, and writes XMP creation date metadata using the bundled exiftool.
+.EXAMPLE
+Add-ImageXmpDateMetadata -InputPath (Join-Path $PWD 'assets') -Recurse -Verbose -ExifToolPath 'C:\tools\exiftool\exiftool.exe'
+
+Processes every supported image beneath the assets directory, recursing into child folders, and writes XMP creation date metadata using the specified exiftool.
+
+.EXAMPLE
+Add-ImageXmpDateMetadata -InputPath (Join-Path $PWD 'assets') -OutputDirectory (Join-Path $PWD 'out') -Recurse -Passthru -ExifToolPath 'C:\tools\exiftool\exiftool.exe'
+
+Copies supported images to the out directory, preserving their relative structure, updates XMP creation date metadata, and outputs information about the processed files.
 
 .EXAMPLE
 Get-ChildItem -Path (Join-Path $PWD 'assets') -Filter '*0900.jpg' | Add-ImageXmpDateMetadata -Passthru
@@ -166,7 +176,10 @@ Pipes matching image files to the function and outputs the files that were updat
         [switch] $Passthru,
 
         [ValidateNotNullOrEmpty()]
-        [string] $ExifToolPath
+        [string] $ExifToolPath,
+
+        [ValidateNotNullOrEmpty()]
+        [string] $OutputDirectory
     )
 
     begin {
@@ -177,6 +190,7 @@ Pipes matching image files to the function and outputs the files that were updat
 
         $culture = [System.Globalization.CultureInfo]::InvariantCulture
         $resolvedExifToolPath = $null
+        $resolvedOutputDirectory = $null
 
         if ($PSBoundParameters.ContainsKey('ExifToolPath')) {
             try {
@@ -199,11 +213,31 @@ Pipes matching image files to the function and outputs the files that were updat
             $resolvedExifToolPath = $command.Path
         }
 
+        if ($PSBoundParameters.ContainsKey('OutputDirectory')) {
+            try {
+                $resolvedOutputDirectory = (Resolve-Path -LiteralPath $OutputDirectory -ErrorAction Stop).ProviderPath
+            }
+            catch {
+                throw ("The specified output directory '{0}' could not be resolved: {1}" -f $OutputDirectory, $_.Exception.Message)
+            }
+
+            if (-not (Test-Path -LiteralPath $resolvedOutputDirectory -PathType Container)) {
+                try {
+                    New-Item -ItemType Directory -Path $resolvedOutputDirectory -Force | Out-Null
+                }
+                catch {
+                    throw ("Failed to create output directory '{0}': {1}" -f $resolvedOutputDirectory, $_.Exception.Message)
+                }
+            }
+        }
+
         if (-not (Test-Path -LiteralPath $resolvedExifToolPath -PathType Leaf)) {
             throw ("Resolved exiftool path '{0}' is not a file." -f $resolvedExifToolPath)
         }
 
         $script:PSXmpDateInjector_ExifToolPath = $resolvedExifToolPath
+        $script:PSXmpDateInjector_OutputDirectory = $resolvedOutputDirectory
+        $script:PSXmpDateInjector_InputRoot = $null
     }
 
     process {
@@ -216,7 +250,7 @@ Pipes matching image files to the function and outputs the files that were updat
         }
         catch {
             Write-Error ("Input path '{0}' could not be resolved: {1}" -f $InputPath, $_.Exception.Message)
-            continue
+            return
         }
 
         foreach ($resolvedPath in $resolvedPaths) {
@@ -231,6 +265,8 @@ Pipes matching image files to the function and outputs the files that were updat
             $filesToProcess = @()
 
             if ($item.PSIsContainer) {
+                $script:PSXmpDateInjector_InputRoot = $item.FullName
+
                 $searchParameters = @{
                     LiteralPath = $item.FullName
                     File        = $true
@@ -257,6 +293,10 @@ Pipes matching image files to the function and outputs the files that were updat
                 }
             }
             else {
+                if (-not $script:PSXmpDateInjector_InputRoot) {
+                    $script:PSXmpDateInjector_InputRoot = [System.IO.Path]::GetDirectoryName($item.FullName)
+                }
+
                 $extension = [System.IO.Path]::GetExtension($item.Name).ToLowerInvariant()
 
                 if ($supportedExtensions -contains $extension) {
@@ -280,7 +320,36 @@ Pipes matching image files to the function and outputs the files that were updat
                 $metadataValue = $timestamp.ToString("yyyy-MM-dd'T'HH:mm:ss", $culture)
                 Write-Verbose ("Extracted timestamp '{0}' from '{1}'." -f $metadataValue, $file.Name)
 
-                if ($PSCmdlet.ShouldProcess($file.FullName, "Set XMP creation dates to $metadataValue")) {
+                $sourcePath = $file.FullName
+                $targetPath = $sourcePath
+
+                if ($script:PSXmpDateInjector_OutputDirectory) {
+                    $relativePath = if ($script:PSXmpDateInjector_InputRoot) {
+                        $sourceUri = New-Object System.Uri $sourcePath
+                        $rootUri = New-Object System.Uri (([System.IO.Path]::GetFullPath($script:PSXmpDateInjector_InputRoot.TrimEnd([System.IO.Path]::DirectorySeparatorChar))) + [System.IO.Path]::DirectorySeparatorChar)
+                        $rootUri.MakeRelativeUri($sourceUri).ToString().Replace('/', [System.IO.Path]::DirectorySeparatorChar)
+                    }
+                    else {
+                        $file.Name
+                    }
+
+                    if ([string]::IsNullOrEmpty($relativePath)) {
+                        $relativePath = $file.Name
+                    }
+
+                    $targetPath = [System.IO.Path]::Combine($script:PSXmpDateInjector_OutputDirectory, $relativePath)
+                }
+
+                if ($PSCmdlet.ShouldProcess($targetPath, "Set XMP creation dates to $metadataValue")) {
+                    if ($script:PSXmpDateInjector_OutputDirectory -and ($targetPath -ne $sourcePath)) {
+                        $targetDirectory = [System.IO.Path]::GetDirectoryName($targetPath)
+                        if ($targetDirectory -and -not (Test-Path -LiteralPath $targetDirectory)) {
+                            New-Item -ItemType Directory -Path $targetDirectory -Force | Out-Null
+                        }
+
+                        Copy-Item -LiteralPath $sourcePath -Destination $targetPath -Force
+                    }
+
                     $arguments = @(
                         '-overwrite_original'
                         '-P'
@@ -289,20 +358,22 @@ Pipes matching image files to the function and outputs the files that were updat
                         ("-XMP-exif:DateTimeOriginal={0}" -f $metadataValue)
                         ("-XMP-photoshop:DateCreated={0}" -f $metadataValue)
                         ("-XMP-xmp:CreateDate={0}" -f $metadataValue)
-                        $file.FullName
+                        $targetPath
                     )
 
                     $exitCode = Invoke-PSXmpDateInjectorExifTool -ExecutablePath $script:PSXmpDateInjector_ExifToolPath -Arguments $arguments
 
                     if ($exitCode -ne 0) {
-                        throw ("exiftool exited with code {0} while processing '{1}'." -f $exitCode, $file.FullName)
+                        throw ("exiftool exited with code {0} while processing '{1}'." -f $exitCode, $targetPath)
                     }
 
                     if ($Passthru.IsPresent) {
                         [pscustomobject]@{
-                            FilePath  = $file.FullName
-                            Timestamp = $metadataValue
-                            ExifTool  = $script:PSXmpDateInjector_ExifToolPath
+                            SourcePath      = $sourcePath
+                            FilePath        = $targetPath
+                            Timestamp       = $metadataValue
+                            ExifTool        = $script:PSXmpDateInjector_ExifToolPath
+                            OutputDirectory = $script:PSXmpDateInjector_OutputDirectory
                         }
                     }
                 }
@@ -310,5 +381,7 @@ Pipes matching image files to the function and outputs the files that were updat
         }
     }
 }
+
+Export-ModuleMember -Function Add-ImageXmpDateMetadata, Get-DateFromFileName
 
 Export-ModuleMember -Function Add-ImageXmpDateMetadata, Get-DateFromFileName
