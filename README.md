@@ -1,5 +1,5 @@
 ﻿
-# PSXmpDateInjector
+# PSMetaDataInjector
 
 PSXmpDateInjector adds XMP creation date metadata to image files by parsing timestamps from their file names and invoking exiftool to update the XMP `exif:DateTimeOriginal`, `photoshop:DateCreated`, and `xmp:CreateDate` tags. These tags are the same ones Lightroom Classic rewrites when you adjust a photo’s Capture Time, so keeping them synchronized preserves compatibility with Lightroom’s date handling.
 
@@ -63,3 +63,4 @@ Invoke-Pester -CI
 ```
 
 Run tests on Windows PowerShell 5.1 to match the module's target environment. The test suite copies sample images into `assets\dest`; the directory is cleared before each run but left populated afterwards for inspection.
+
