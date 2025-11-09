@@ -1,3 +1,5 @@
 scripts/config.json
 bin/exiftool.exe
 bin/exiftool
+TASKS.md
+testResults.xml

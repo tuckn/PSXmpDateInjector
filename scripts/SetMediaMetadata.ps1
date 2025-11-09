@@ -15,6 +15,18 @@ param(
     [ValidateNotNullOrEmpty()]
     [string] $OutputDirectory,
 
+    [Nullable[datetime]] $CreatedDate,
+
+    [switch] $InferCreatedDate,
+
+    [ValidateNotNullOrEmpty()]
+    [string] $Title,
+
+    [AllowNull()]
+    [string] $Description,
+
+    [string[]] $Keywords,
+
     [ValidateNotNullOrEmpty()]
     [string] $ConfigJsonPath
 )
@@ -22,9 +34,20 @@ param(
 Set-StrictMode -Version 3.0
 $ErrorActionPreference = 'Stop'
 
-Import-Module (Join-Path $PSScriptRoot '..\PSXmpDateInjector.psd1') -Force -ErrorAction Stop
+Import-Module (Join-Path $PSScriptRoot '..\PSMetaDataInjector.psd1') -Force -ErrorAction Stop
 
-$parameterOrder = @('InputPath', 'Recurse', 'Passthru', 'ExifToolPath', 'OutputDirectory')
+$parameterOrder = @(
+    'InputPath',
+    'Recurse',
+    'Passthru',
+    'ExifToolPath',
+    'OutputDirectory',
+    'CreatedDate',
+    'InferCreatedDate',
+    'Title',
+    'Description',
+    'Keywords'
+)
 $configParameters = @{}
 
 if ($PSBoundParameters.ContainsKey('ConfigJsonPath')) {
@@ -74,4 +97,4 @@ if (-not $effectiveParameters.ContainsKey('InputPath') -or [string]::IsNullOrWhi
     throw 'InputPath must be supplied either on the command line or in the configuration file.'
 }
 
-Add-ImageXmpDateMetadata @effectiveParameters
+Set-MediaMetadata @effectiveParameters
