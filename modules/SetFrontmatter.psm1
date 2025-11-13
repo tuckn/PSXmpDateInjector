@@ -135,7 +135,8 @@ Specifies one or more tag strings that are emitted as a YAML array.
     else {
         $existingContent
     }
-    $body = $body.TrimStart()
+    # After the existing frontmatter block is removed, the remaining body is passed through $body.TrimStart() before being re-written. TrimStart eliminates all leading whitespace, so if the file begins with indentation-sensitive Markdown (e.g., a code block or blockquote immediately after the frontmatter), the indentation is stripped and the semantics of the document change. We only need to drop the extra blank line that separates the frontmatter from the content; trimming every leading space/tabs corrupts formatted content. Please preserve the original indentation when rebuilding the file
+    # $body = $body.TrimStart()
 
     $updatedContent = $frontmatterBlock + $lineEnding + $lineEnding + $body
 
