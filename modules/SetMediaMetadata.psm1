@@ -245,12 +245,6 @@ Specifies the path to a single image file or a directory that contains image fil
 .PARAMETER Recurse
 When InputPath is a directory, include image files from all child directories.
 
-.PARAMETER Passthru
-Outputs an object describing each updated file to the pipeline.
-
-.PARAMETER ExifToolPath
-Provides the path to the exiftool executable. When omitted, the function searches for exiftool on the PATH.
-
 .PARAMETER OutputDirectory
 Specifies a directory where processed files are written. When provided, source files are copied to the directory (preserving relative structure for directory inputs) before metadata is updated. When omitted, files are updated in place.
 
@@ -268,6 +262,12 @@ Specifies the XMP dc:description text (x-default locale) to write.
 
 .PARAMETER Keywords
 Supplies one or more keywords. Pipe characters (|) denote hierarchical keywords in Lightroom format.
+
+.PARAMETER ExifToolPath
+Provides the path to the exiftool executable. When omitted, the function searches for exiftool on the PATH.
+
+.PARAMETER Passthru
+Outputs an object describing each updated file to the pipeline.
 #>
     [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'Medium')]
     param(
@@ -277,11 +277,6 @@ Supplies one or more keywords. Pipe characters (|) denote hierarchical keywords 
         [string] $InputPath,
 
         [switch] $Recurse,
-
-        [switch] $Passthru,
-
-        [ValidateNotNullOrEmpty()]
-        [string] $ExifToolPath,
 
         [ValidateNotNullOrEmpty()]
         [string] $OutputDirectory,
@@ -295,7 +290,12 @@ Supplies one or more keywords. Pipe characters (|) denote hierarchical keywords 
         [AllowNull()]
         [string] $Description,
 
-        [string[]] $Keywords
+        [string[]] $Keywords,
+
+        [ValidateNotNullOrEmpty()]
+        [string] $ExifToolPath,
+
+        [switch] $Passthru
     )
 
     begin {

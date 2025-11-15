@@ -75,7 +75,7 @@ scripts\SetMediaMetadata.ps1 -ConfigJsonPath .\scripts\config_sample.json -Passt
 {
   "InputPath": "../assets",
   "ExifToolPath": "C:/tools/exiftool/exiftool.exe",
-  "OutputDirectory": "../assets/dest",
+  "OutputDirectory": "../tests/dest",
   "CreatedDate": "2025-01-01T00:00:00",
   "InferCreatedDate": true,
   "Title": "Sample Title",
@@ -102,7 +102,7 @@ Use `-WhatIf` to see what would be changed without writing metadata, `-Passthru`
 Invoke-Pester -CI
 ```
 
-Run tests on Windows PowerShell 5.1 to match the target environment. The suite copies sample images into `assets\dest`; it clears the directory before each run but leaves the files in place afterward for inspection.
+Run tests on Windows PowerShell 5.1 to match the target environment. The suite copies sample images into `tests\dest`; it clears the directory before each run but leaves the files in place afterward for inspection.
 
 ### Integration test (real exiftool writes)
 
@@ -111,7 +111,8 @@ Use this when you want to confirm end-to-end metadata writes instead of relying 
 ```powershell
 $repo   = Get-Location
 $assets = Join-Path $repo 'assets'
-$dest   = Join-Path $assets 'dest'
+$tests = Join-Path $repo 'tests'
+$dest   = Join-Path $tests 'dest'
 Remove-Item -LiteralPath $dest -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Path $dest -Force | Out-Null
 
@@ -137,4 +138,4 @@ Then inspect any output file with exiftool to verify the expected tags:
 & (Join-Path $repo 'bin/exiftool.exe') -G -XMP:DateTimeOriginal -XMP:Headline -XMP:Subject (Join-Path $dest '20130630T023600+0900.jpg')
 ```
 
-This procedure runs against actual files, so undo changes as needed (for example by deleting `assets\dest`) before rerunning the unit test suite.
+This procedure runs against actual files, so undo changes as needed (for example by deleting `tests\dest`) before rerunning the unit test suite.

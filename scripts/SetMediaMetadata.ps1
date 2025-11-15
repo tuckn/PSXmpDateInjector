@@ -7,11 +7,6 @@ param(
 
     [switch] $Recurse,
 
-    [switch] $Passthru,
-
-    [ValidateNotNullOrEmpty()]
-    [string] $ExifToolPath,
-
     [ValidateNotNullOrEmpty()]
     [string] $OutputDirectory,
 
@@ -28,7 +23,12 @@ param(
     [string[]] $Keywords,
 
     [ValidateNotNullOrEmpty()]
-    [string] $ConfigJsonPath
+    [string] $ExifToolPath,
+
+    [ValidateNotNullOrEmpty()]
+    [string] $ConfigJsonPath,
+
+    [switch] $Passthru
 )
 
 Set-StrictMode -Version 3.0
@@ -39,14 +39,14 @@ Import-Module (Join-Path $PSScriptRoot '..\PSMetaDataInjector.psd1') -Force -Err
 $parameterOrder = @(
     'InputPath',
     'Recurse',
-    'Passthru',
-    'ExifToolPath',
     'OutputDirectory',
     'CreatedDate',
     'InferCreatedDate',
     'Title',
     'Description',
-    'Keywords'
+    'Keywords',
+    'ExifToolPath',
+    'Passthru'
 )
 $configParameters = @{}
 

@@ -19,18 +19,24 @@ Describe 'PSMetaDataInjector' {
         if (-not (Test-Path -LiteralPath $assetsRootCandidate -PathType Container)) {
             throw "Assets directory was not found at '$assetsRootCandidate'."
         }
-
         $script:AssetsRoot = (Resolve-Path -LiteralPath $assetsRootCandidate).ProviderPath
-        $script:AssetsDest = [System.IO.Path]::Combine($script:AssetsRoot, 'dest')
-        $script:OutputRoot = [System.IO.Path]::Combine($script:AssetsRoot, 'out')
 
-        foreach ($folder in @($script:AssetsDest, $script:OutputRoot)) {
+        $testsRootCandidate = [System.IO.Path]::Combine($repoRoot, 'tests')
+        if (-not (Test-Path -LiteralPath $testsRootCandidate -PathType Container)) {
+            throw "tests directory was not found at '$testsRootCandidate'."
+        }
+        $script:TestsRoot = (Resolve-Path -LiteralPath $testsRootCandidate).ProviderPath
+
+        $script:TestsDest = [System.IO.Path]::Combine($script:TestsRoot, 'dest')
+        $script:OutputRoot = [System.IO.Path]::Combine($script:TestsRoot, 'out')
+
+        foreach ($folder in @($script:TestsDest, $script:OutputRoot)) {
             if (Test-Path -LiteralPath $folder) {
                 Remove-Item -LiteralPath $folder -Recurse -Force
             }
         }
 
-        $excludePatterns = @([System.IO.Path]::Combine($script:AssetsDest, '*'), [System.IO.Path]::Combine($script:OutputRoot, '*'))
+        $excludePatterns = @([System.IO.Path]::Combine($script:TestsDest, '*'), [System.IO.Path]::Combine($script:OutputRoot, '*'))
         $script:SourceAssets = Get-ChildItem -LiteralPath $script:AssetsRoot -File -Recurse | Where-Object {
             foreach ($pattern in $excludePatterns) {
                 if ($_.FullName -like $pattern) { return $false }
@@ -56,7 +62,7 @@ Describe 'PSMetaDataInjector' {
     BeforeEach {
         Set-Variable -Name WhatIfPreference -Value $false -Scope Global
 
-        foreach ($folder in @($script:AssetsDest, $script:OutputRoot)) {
+        foreach ($folder in @($script:TestsDest, $script:OutputRoot)) {
             if (Test-Path -LiteralPath $folder) {
                 Remove-Item -LiteralPath $folder -Recurse -Force
             }
@@ -65,7 +71,7 @@ Describe 'PSMetaDataInjector' {
 
         foreach ($source in $script:SourceAssets) {
             $relative = $source.FullName.Substring($script:AssetsRoot.Length).TrimStart([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
-            $target = [System.IO.Path]::Combine($script:AssetsDest, $relative)
+            $target = [System.IO.Path]::Combine($script:TestsDest, $relative)
             $targetDir = [System.IO.Path]::GetDirectoryName($target)
             if ($targetDir -and -not (Test-Path -LiteralPath $targetDir)) {
                 New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
@@ -101,7 +107,7 @@ Describe 'PSMetaDataInjector' {
 
     Context 'Set-MediaMetadata' {
         It 'infers timestamps when requested' {
-            $filePath = [System.IO.Path]::Combine($script:AssetsDest, '20130630T023600+0900.jpg')
+            $filePath = [System.IO.Path]::Combine($script:TestsDest, '20130630T023600+0900.jpg')
             $expectedExifToolPath = $script:TestExifToolPath
 
             InModuleScope SetMediaMetadata -ScriptBlock {
@@ -122,7 +128,7 @@ Describe 'PSMetaDataInjector' {
         }
 
         It 'falls back to CreatedDate when inference fails' {
-            $filePath = [System.IO.Path]::Combine($script:AssetsDest, '20130630T023600+0900.jpg')
+            $filePath = [System.IO.Path]::Combine($script:TestsDest, '20130630T023600+0900.jpg')
             $toolPath = $script:TestExifToolPath
             $manualDate = Get-Date '2024-10-05T04:03:02'
 
@@ -142,7 +148,7 @@ Describe 'PSMetaDataInjector' {
         }
 
         It 'applies title, description, and keywords when provided' {
-            $filePath = [System.IO.Path]::Combine($script:AssetsDest, '20130630T023600+0900.jpg')
+            $filePath = [System.IO.Path]::Combine($script:TestsDest, '20130630T023600+0900.jpg')
             $toolPath = $script:TestExifToolPath
             $titleValue = 'Kyoto Sunrise'
             $descriptionValue = '意図して脳細胞を増やすことについての気づきを綴った内容'
@@ -173,7 +179,7 @@ Describe 'PSMetaDataInjector' {
         }
 
         It 'skips files when no metadata is available' {
-            $filePath = [System.IO.Path]::Combine($script:AssetsDest, '20130630T023600+0900.jpg')
+            $filePath = [System.IO.Path]::Combine($script:TestsDest, '20130630T023600+0900.jpg')
             $toolPath = $script:TestExifToolPath
 
             InModuleScope SetMediaMetadata -ScriptBlock {
@@ -188,7 +194,7 @@ Describe 'PSMetaDataInjector' {
 
         It 'writes files to the designated output directory when specified' {
             $toolPath = $script:TestExifToolPath
-            $assetsDest = $script:AssetsDest
+            $testsDest = $script:TestsDest
             $outputRoot = $script:OutputRoot
 
             InModuleScope SetMediaMetadata -ScriptBlock {
@@ -204,13 +210,13 @@ Describe 'PSMetaDataInjector' {
                 (($results | Where-Object { $_.SourcePath -notlike ($sourceRoot + '*') }) | Measure-Object).Count | Should -Be 0
                 (($results | Where-Object { $_.FilePath -notlike ($outRoot + '*') }) | Measure-Object).Count | Should -Be 0
                 ($results | Where-Object { $_.FilePath -like '*Screenshot 2025-11-02 073031.png' }).FilePath | Should -Match 'Screenshot 2025-11-02 073031\.png'
-            } -ArgumentList $assetsDest, $outputRoot, $toolPath
+            } -ArgumentList $testsDest, $outputRoot, $toolPath
 
             (Get-ChildItem -LiteralPath $script:OutputRoot -File -Recurse | Measure-Object).Count | Should -Be 4
         }
 
         It 'respects WhatIf mode' {
-            $filePath = [System.IO.Path]::Combine($script:AssetsDest, '20130630T023600+0900.jpg')
+            $filePath = [System.IO.Path]::Combine($script:TestsDest, '20130630T023600+0900.jpg')
             $toolPath = $script:TestExifToolPath
 
             InModuleScope SetMediaMetadata -ScriptBlock {

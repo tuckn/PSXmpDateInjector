@@ -1,7 +1,7 @@
 {
   "InputPath": "../assets",
   "ExifToolPath": "C:/tools/exiftool/exiftool.exe",
-  "OutputDirectory": "../assets/dest",
+  "OutputDirectory": "../tests/dest",
   "CreatedDate": "2025-01-01T00:00:00",
   "InferCreatedDate": true,
   "Title": "Sample Title",
